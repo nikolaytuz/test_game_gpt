@@ -1,0 +1,5 @@
+{
+"colors":{"bgTop":"#e7ebff","bgBottom":"#dfe6ff","grid":"#c7cbe6","line":"#aab0d9","good":"#33cc66","bad":"#ff5b5b","text":"#e8e8e8"},
+"shadows":{"unit":0.3,"building":0.35,"log":0.4},
+"particles":{"max":100}
+}
