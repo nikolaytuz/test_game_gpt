@@ -24,16 +24,10 @@ export interface MatchRuntime {
   nodes: Map<number, RuntimeNode>;
   convoys: Map<string, Convoy>;
   edges: Array<{ from: number; to: number; distance: number }>;
-  nodeKinds: Map<number, string>;
   lastBroadcastAt: number;
   lastTickAt: number;
   lastSendByUser: Map<string, number>;
   teams: { A?: string; B?: string };
-  startedAt: number;
-  endsAt: number;
-  domination: { leader: Team | null; sinceMs: number | null };
-  winner?: Team;
-  reason?: 'BASE_CAPTURE' | 'DOMINATION' | 'TIMEOUT';
   tickHandle?: NodeJS.Timeout;
   broadcastHandle?: NodeJS.Timeout;
 }

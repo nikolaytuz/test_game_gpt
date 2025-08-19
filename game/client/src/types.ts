@@ -10,11 +10,6 @@ export interface MatchState {
   players: MatchPlayer[];
   map: { blueprintId: number; nodes: MapNode[]; edges: MapEdge[] };
   nodesState: NodeState[];
-  timer?: TimerInfo;
-  control?: ControlInfo;
-  domination?: DominationInfo;
-  winner?: Team;
-  reason?: 'BASE_CAPTURE' | 'DOMINATION' | 'TIMEOUT';
 }
 
 export interface Convoy {
@@ -31,9 +26,6 @@ export interface BroadcastState {
   now: number;
   nodesState: { nodeId: number; owner: Team | null; garrison: number }[];
   convoys: Convoy[];
-  timer: TimerInfo;
-  control: ControlInfo;
-  domination: DominationInfo;
 }
 
 export interface SendTroopsPayload {
@@ -41,14 +33,4 @@ export interface SendTroopsPayload {
   fromNodeId: number;
   toNodeId: number;
   percent: 25 | 50 | 100;
-}
-
-export interface TimerInfo { startedAt: number; endsAt: number; }
-export interface ControlInfo { a: number; b: number; total: number; }
-export interface DominationInfo { leader: Team | null; sinceMs: number | null; }
-export interface MatchOverPayload {
-  matchId: string;
-  winner: Team;
-  reason: 'BASE_CAPTURE' | 'DOMINATION' | 'TIMEOUT';
-  endedAt: number;
 }

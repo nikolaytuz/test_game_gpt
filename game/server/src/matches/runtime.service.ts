@@ -4,23 +4,13 @@ import { Repository } from 'typeorm';
 import { Match } from './match.entity';
 import { MapBlueprint } from '../maps/map-blueprint.entity';
 import { MatchRuntime, Convoy } from './runtime.types';
-import { Team } from '../common/types';
-import {
-  TICK_RATE,
-  BROADCAST_RATE,
-  UNIT_SPEED,
-  MATCH_DURATION_SEC,
-  DOMINATION_THRESHOLD,
-  DOMINATION_HOLD_SEC,
-  MAX_GARRISON,
-} from '../ws/constants';
+import { TICK_RATE, BROADCAST_RATE, UNIT_SPEED } from '../ws/constants';
 import { randomUUID } from 'crypto';
 import { Server } from 'socket.io';
 
 @Injectable()
 export class RuntimeService {
   private runtimes = new Map<string, MatchRuntime>();
-  private server: Server;
 
   constructor(
     @InjectRepository(MapBlueprint) private blueprints: Repository<MapBlueprint>,
@@ -32,10 +22,8 @@ export class RuntimeService {
   }
 
   async startMatch(matchId: string, server: Server, teams: { A?: string; B?: string }) {
-    this.server = server;
     const blueprint = await this.blueprints.findOne({ where: { id: 1 }, relations: ['nodes', 'edges'] });
     if (!blueprint) return;
-    const now = Date.now();
     const runtime: MatchRuntime = {
       matchId,
       blueprintId: blueprint.id,
@@ -43,14 +31,10 @@ export class RuntimeService {
       nodes: new Map(),
       convoys: new Map(),
       edges: blueprint.edges.map((e) => ({ from: e.from.id, to: e.to.id, distance: e.distance })),
-      nodeKinds: new Map(blueprint.nodes.map((n) => [n.id, n.kind])),
-      lastBroadcastAt: now,
-      lastTickAt: now,
+      lastBroadcastAt: Date.now(),
+      lastTickAt: Date.now(),
       lastSendByUser: new Map(),
       teams,
-      startedAt: now,
-      endsAt: now + MATCH_DURATION_SEC * 1000,
-      domination: { leader: null, sinceMs: null },
     };
     blueprint.nodes.forEach((n) => {
       let owner: 'A' | 'B' | null = null;
@@ -83,17 +67,7 @@ export class RuntimeService {
       const now = Date.now();
       const nodesState = Array.from(runtime.nodes.values()).map((n) => ({ nodeId: n.nodeId, owner: n.owner, garrison: n.garrison }));
       const convoys = Array.from(runtime.convoys.values());
-      const control = this.countControl(runtime);
-      this.server
-        .to(`match:${matchId}`)
-        .emit('match:state', {
-          now,
-          nodesState,
-          convoys,
-          timer: { startedAt: runtime.startedAt, endsAt: runtime.endsAt },
-          control,
-          domination: runtime.domination,
-        });
+      server.to(`match:${matchId}`).emit('match:state', { now, nodesState, convoys });
       runtime.lastBroadcastAt = now;
     }, broadcastMs);
   }
@@ -112,7 +86,7 @@ export class RuntimeService {
       if (node.owner && node.prodPerSec > 0) {
         node.garrison += node.prodPerSec * deltaSec;
       }
-      node.garrison = Math.min(MAX_GARRISON, Math.floor(node.garrison));
+      node.garrison = Math.floor(node.garrison);
     }
     for (const convoy of Array.from(runtime.convoys.values())) {
       if (now >= convoy.arriveAt) {
@@ -120,13 +94,11 @@ export class RuntimeService {
         runtime.convoys.delete(convoy.id);
       }
     }
-    this.evaluateWinConditions(runtime, now);
   }
 
   resolveArrival(runtime: MatchRuntime, convoy: Convoy) {
     const dst = runtime.nodes.get(convoy.toNodeId);
     if (!dst) return;
-    const prevOwner = dst.owner;
     if (dst.owner === convoy.team) {
       dst.garrison += convoy.total;
     } else if (dst.owner === null) {
@@ -140,15 +112,6 @@ export class RuntimeService {
       } else {
         dst.garrison -= convoy.total;
       }
-    }
-    const kind = runtime.nodeKinds.get(convoy.toNodeId);
-    if (
-      kind === 'BASE' &&
-      prevOwner &&
-      prevOwner !== convoy.team &&
-      dst.owner === convoy.team
-    ) {
-      this.finishMatch(runtime, convoy.team as Team, 'BASE_CAPTURE');
     }
   }
 
@@ -172,61 +135,5 @@ export class RuntimeService {
     };
     runtime.convoys.set(convoy.id, convoy);
     return convoy;
-  }
-
-  private countControl(runtime: MatchRuntime) {
-    let a = 0;
-    let b = 0;
-    let total = 0;
-    for (const node of runtime.nodes.values()) {
-      const kind = runtime.nodeKinds.get(node.nodeId);
-      if (kind) total++;
-      if (node.owner === 'A') a++;
-      if (node.owner === 'B') b++;
-    }
-    return { a, b, total };
-  }
-
-  private evaluateWinConditions(runtime: MatchRuntime, now: number) {
-    if (runtime.winner) return;
-
-    if (now >= runtime.endsAt) {
-      const { a, b } = this.countControl(runtime);
-      const winner: Team = a === b ? 'A' : a > b ? 'A' : 'B';
-      this.finishMatch(runtime, winner, 'TIMEOUT');
-      return;
-    }
-
-    const { a, b, total } = this.countControl(runtime);
-    const aShare = a / total;
-    const bShare = b / total;
-    let leader: Team | null = null;
-    if (aShare >= DOMINATION_THRESHOLD) leader = 'A';
-    else if (bShare >= DOMINATION_THRESHOLD) leader = 'B';
-
-    if (leader) {
-      if (runtime.domination.leader !== leader) {
-        runtime.domination.leader = leader;
-        runtime.domination.sinceMs = now;
-      } else if (runtime.domination.sinceMs && now - runtime.domination.sinceMs >= DOMINATION_HOLD_SEC * 1000) {
-        this.finishMatch(runtime, leader, 'DOMINATION');
-      }
-    } else {
-      runtime.domination.leader = null;
-      runtime.domination.sinceMs = null;
-    }
-  }
-
-  private finishMatch(runtime: MatchRuntime, winner: Team, reason: 'BASE_CAPTURE' | 'DOMINATION' | 'TIMEOUT') {
-    if (runtime.winner) return;
-    runtime.winner = winner;
-    runtime.reason = reason;
-    runtime.status = 'FINISHED';
-    if (runtime.tickHandle) clearInterval(runtime.tickHandle);
-    if (runtime.broadcastHandle) clearInterval(runtime.broadcastHandle);
-    this.matches.update({ id: runtime.matchId }, { status: 'FINISHED' });
-    this.server
-      .to(`match:${runtime.matchId}`)
-      .emit('match:over', { matchId: runtime.matchId, winner, reason, endedAt: Date.now() });
   }
 }

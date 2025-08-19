@@ -47,28 +47,8 @@ export class LobbyGateway {
     const map = await this.blueprints.findOne({ where: { id: 1 }, relations: ['nodes', 'edges'] });
     const rt = this.runtime.getRuntime(match.id);
     let nodesState: NodeState[];
-    let timer = undefined;
-    let control = undefined;
-    let domination = undefined;
-    let winner = undefined;
-    let reason = undefined;
     if (rt) {
       nodesState = Array.from(rt.nodes.values()).map((n) => ({ nodeId: n.nodeId, owner: n.owner, garrison: n.garrison }));
-      timer = { startedAt: rt.startedAt, endsAt: rt.endsAt };
-      const counts = (() => {
-        let a = 0, b = 0, total = 0;
-        for (const n of rt.nodes.values()) {
-          const kind = rt.nodeKinds.get(n.nodeId);
-          if (kind) total++;
-          if (n.owner === 'A') a++;
-          if (n.owner === 'B') b++;
-        }
-        return { a, b, total };
-      })();
-      control = counts;
-      domination = rt.domination;
-      winner = rt.winner;
-      reason = rt.reason;
     } else {
       nodesState = map.nodes.map((n) => ({ nodeId: n.id, owner: n.id === 1 ? 'A' : n.id === 5 ? 'B' : null, garrison: 0 }));
     }
@@ -76,12 +56,7 @@ export class LobbyGateway {
       matchId: match.id,
       players: players.map((p) => ({ userId: p.user.id, nickname: p.user.nickname, team: p.team })),
       map: { blueprintId: map.id, nodes: map.nodes, edges: map.edges },
-      nodesState,
-      timer,
-      control,
-      domination,
-      winner,
-      reason,
+      nodesState
     };
   }
 
@@ -117,7 +92,7 @@ export class LobbyGateway {
     if (!user) return { ok: false };
 
     const match = await this.matches.findOne({ where: { id: body.matchId } });
-    if (!match) return { ok: false };
+    if (!match || match.status === 'FINISHED') return { ok: false };
     const existing = await this.participants.find({ where: { match: { id: match.id } }, relations: ['user'] });
     let participant = existing.find((p) => p.user.id === user.id);
     if (!participant) {
@@ -127,13 +102,6 @@ export class LobbyGateway {
       existing.push({ ...participant, user });
     }
     socket.join(`match:${match.id}`);
-    if (match.status === 'FINISHED') {
-      const rt = this.runtime.getRuntime(match.id);
-      const winner = rt?.winner;
-      const reason = rt?.reason;
-      socket.emit('match:over', { matchId: match.id, winner, reason, endedAt: Date.now() });
-      return { ok: true, finished: true, winner, reason };
-    }
     if (match.status === 'WAITING' && existing.length === 2) {
       await this.runtime.startMatch(match.id, this.server, {
         A: existing.find((p) => p.team === 'A')?.user.id,
