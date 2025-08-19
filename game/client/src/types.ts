@@ -12,10 +12,20 @@ export interface MatchState {
   nodesState: NodeState[];
 }
 
+export interface Convoy {
+  id: string;
+  team: Team;
+  fromNodeId: number;
+  toNodeId: number;
+  total: number;
+  departAt: number;
+  arriveAt: number;
+}
+
 export interface BroadcastState {
   now: number;
   nodesState: { nodeId: number; owner: Team | null; garrison: number }[];
-  convoys: { id: string; team: Team; from: number; to: number; total: number; departAt: number; arriveAt: number }[];
+  convoys: Convoy[];
 }
 
 export interface SendTroopsPayload {

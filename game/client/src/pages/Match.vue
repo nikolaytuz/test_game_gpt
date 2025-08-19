@@ -16,7 +16,7 @@ import { useSocketStore } from '../store/socket';
 import { useAuthStore } from '../store/auth';
 import { useMatchStore } from '../store/match';
 import MapCanvas from '../components/MapCanvas.vue';
-import { MatchState, SendTroopsPayload } from '../types';
+import { MatchState, SendTroopsPayload, BroadcastState } from '../types';
 
 const route = useRoute();
 const socket = useSocketStore();
@@ -32,7 +32,7 @@ onMounted(async () => {
     state.value = res.state;
     const me = res.state.players.find((p: any) => p.userId === auth.user.id);
     match.init(me.team, res.state.nodesState);
-    socket.socket.on('match:state', (s: any) => match.updateFromBroadcast(s));
+    socket.socket.on('match:state', (s: BroadcastState) => match.updateFromBroadcast(s));
   }
 });
 

@@ -14,16 +14,17 @@
       </g>
       <g v-for="c in convoys" :key="c.id">
         <circle :cx="convoyPos(c).x" :cy="convoyPos(c).y" r="5" :fill="c.team==='A' ? 'blue' : 'red'" />
+        <text :x="convoyPos(c).x" :y="convoyPos(c).y - 6" font-size="8" text-anchor="middle" fill="black">{{ c.total }}</text>
       </g>
     </g>
   </svg>
 </template>
 
 <script setup lang="ts">
-import { MapNode, MatchState, NodeState, Team } from '../types';
+import { MapNode, MatchState, NodeState, Team, Convoy } from '../types';
 import { ref } from 'vue';
 
-const props = defineProps<{ map: MatchState['map']; nodesState: NodeState[]; convoys: any[]; myTeam: Team }>();
+const props = defineProps<{ map: MatchState['map']; nodesState: NodeState[]; convoys: Convoy[]; myTeam: Team }>();
 const emit = defineEmits<{ (e: 'sendTroops', payload: { fromNodeId: number; toNodeId: number; percent: 25|50|100 }): void }>();
 const selectedFrom = ref<number | null>(null);
 
@@ -60,9 +61,9 @@ function handleNodeClick(id: number) {
   }
 }
 
-function convoyPos(c: { from: number; to: number; departAt: number; arriveAt: number }) {
-  const from = nodeById(c.from);
-  const to = nodeById(c.to);
+function convoyPos(c: Convoy) {
+  const from = nodeById(c.fromNodeId);
+  const to = nodeById(c.toNodeId);
   const progress = Math.min(Math.max((Date.now() - c.departAt) / (c.arriveAt - c.departAt), 0), 1);
   return { x: from.x + (to.x - from.x) * progress, y: from.y + (to.y - from.y) * progress };
 }
