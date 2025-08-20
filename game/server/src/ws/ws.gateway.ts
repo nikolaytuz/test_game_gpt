@@ -1,4 +1,4 @@
-import { Injectable, Inject, forwardRef } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -13,9 +13,6 @@ import { User } from '../users/user.entity';
 import { Match } from '../matches/match.entity';
 import { MatchParticipant } from '../matches/match-participant.entity';
 import { MapsService } from '../maps/maps.service';
-import { RuntimeService } from '../matches/runtime.service';
-import { Team } from '../common/types';
-import { MIN_SEND_COOLDOWN_MS } from './constants';
 
 @WebSocketGateway({ path: '/ws', cors: { origin: '*' } })
 @Injectable()
@@ -29,7 +26,6 @@ export class WsGateway implements OnGatewayConnection {
     @InjectRepository(Match) private matches: Repository<Match>,
     @InjectRepository(MatchParticipant) private parts: Repository<MatchParticipant>,
     private maps: MapsService,
-    @Inject(forwardRef(() => RuntimeService)) private runtime: RuntimeService,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -76,35 +72,14 @@ export class WsGateway implements OnGatewayConnection {
       match.participants.push(participant);
     }
     client.join(`match:${match.id}`);
-    let runtime = this.runtime.getRuntime(match.id);
-    if (match.status === 'WAITING' && match.participants.length >= 2) {
-      match.status = 'RUNNING';
-      await this.matches.save(match);
-      await this.runtime.startMatch(match.id, match.mapBlueprintId, {
-        A: match.participants.find((p) => p.team === 'A')?.user.id,
-        B: match.participants.find((p) => p.team === 'B')?.user.id,
-      });
-      runtime = this.runtime.getRuntime(match.id);
-    }
     const bp = await this.maps.getBlueprint(match.mapBlueprintId);
-    const nodesState = runtime
-      ? Array.from(runtime.nodes.values()).map((n) => ({
-          nodeId: n.nodeId,
-          owner: n.owner,
-          garrison: Math.floor(n.garrison),
-        }))
-      : bp.nodes.map((n) => ({ nodeId: n.id, owner: null, garrison: 0 }));
-    const convoys = runtime
-      ? Array.from(runtime.convoys.values()).map((c) => ({
-          id: c.id,
-          team: c.team,
-          from: c.fromNodeId,
-          to: c.toNodeId,
-          total: c.total,
-          departAt: c.departAt,
-          arriveAt: c.arriveAt,
-        }))
-      : [];
+    const baseNodes = bp.nodes.filter((n) => n.kind === 'BASE');
+    const nodesState = bp.nodes.map((n) => {
+      let owner: 'A' | 'B' | null = null;
+      if (baseNodes[0] && n.id === baseNodes[0].id) owner = 'A';
+      if (baseNodes[1] && n.id === baseNodes[1].id) owner = 'B';
+      return { nodeId: n.id, owner, garrison: 0 };
+    });
     const players = match.participants.map((p) => ({
       userId: p.user.id,
       nickname: p.user.nickname,
@@ -130,52 +105,6 @@ export class WsGateway implements OnGatewayConnection {
           })),
         },
         nodesState,
-        convoys,
-      },
-    };
-  }
-
-  @SubscribeMessage('match:sendTroops')
-  async sendTroops(
-    client: Socket,
-    payload: { matchId: string; fromNodeId: number; toNodeId: number; percent: 25 | 50 | 100 },
-  ) {
-    const runtime = this.runtime.getRuntime(payload.matchId);
-    if (!runtime || runtime.status !== 'RUNNING')
-      return { ok: false, error: { code: 'MATCH_NOT_RUNNING' } };
-    const userId = client.data.user.id as string;
-    const team: Team | null =
-      runtime.teams.A === userId
-        ? 'A'
-        : runtime.teams.B === userId
-        ? 'B'
-        : null;
-    if (!team) return { ok: false };
-    const from = runtime.nodes.get(payload.fromNodeId);
-    const to = runtime.nodes.get(payload.toNodeId);
-    if (!from || !to || from.owner !== team)
-      return { ok: false, error: { code: 'NOT_OWNER' } };
-    if (!this.runtime.isAdjacent(runtime.edges, payload.fromNodeId, payload.toNodeId))
-      return { ok: false, error: { code: 'NOT_ADJACENT' } };
-    const now = Date.now();
-    const last = runtime.lastSendByUser.get(userId) || 0;
-    if (now - last < MIN_SEND_COOLDOWN_MS)
-      return { ok: false, error: { code: 'COOLDOWN' } };
-    const qty = Math.floor((from.garrison * payload.percent) / 100);
-    if (qty < 1) return { ok: false, error: { code: 'NOT_ENOUGH_UNITS' } };
-    from.garrison -= qty;
-    runtime.lastSendByUser.set(userId, now);
-    const convoy = this.runtime.createConvoy(runtime, team, payload.fromNodeId, payload.toNodeId, qty);
-    return {
-      ok: true,
-      convoy: {
-        id: convoy.id,
-        fromNodeId: convoy.fromNodeId,
-        toNodeId: convoy.toNodeId,
-        total: convoy.total,
-        team: convoy.team,
-        departAt: convoy.departAt,
-        arriveAt: convoy.arriveAt,
       },
     };
   }

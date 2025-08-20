@@ -1,0 +1,58 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Output
+dist/
+build/
+coverage/
+.tmp/
+.cache/
+
+# Env
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs
+*.log
+*.log.*
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*.swp
+*.tmp
+.DS_Store
+Thumbs.db
+
+# OS
+ehthumbs.db
+Desktop.ini
+
+# Database dumps
+*.sql
+*.sqlite
+*.sqlite3
+
+# OpenServer / Local configs
+*.cnf
+*.cnf.*
+*.ini
+*.bak

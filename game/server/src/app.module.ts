@@ -11,7 +11,6 @@ import { MatchParticipant } from './matches/match-participant.entity';
 import { AuthModule } from './auth/auth.module';
 import { MapsModule } from './maps/maps.module';
 import { WsGateway } from './ws/ws.gateway';
-import { RuntimeService } from './matches/runtime.service';
 import { HealthController } from './common/health.controller';
 
 @Module({
@@ -43,6 +42,6 @@ import { HealthController } from './common/health.controller';
     MapsModule,
   ],
   controllers: [HealthController],
-  providers: [WsGateway, RuntimeService],
+  providers: [WsGateway],
 })
 export class AppModule {}

@@ -1,7 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, ManyToOne, Column, CreateDateColumn } from 'typeorm';
 import { Match } from './match.entity';
 import { User } from '../users/user.entity';
-import { Team } from '../common/types';
+
+export type Team = 'A' | 'B';
 
 @Entity('match_participants')
 export class MatchParticipant {

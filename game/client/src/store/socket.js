@@ -16,9 +16,6 @@ export const useSocketStore = defineStore('socket', {
       return new Promise((resolve) => {
         this.socket.emit(event, payload, (res) => resolve(res))
       })
-    },
-    onMatchState(cb) {
-      if (this.socket) this.socket.on('match:state', cb)
     }
   }
 })
